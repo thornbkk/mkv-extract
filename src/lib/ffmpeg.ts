@@ -1,4 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
 
 let ffmpeg: FFmpeg | null = null;
 
@@ -15,34 +16,6 @@ export async function loadFFmpeg(onProgress?: (progress: number) => void): Promi
   
   if (onProgress) onProgress(100);
   return ffmpeg;
-}
-
-// แบ่งไฟล์ใหญ่เขียนทีละ chunk แทนการอ่านทั้งหมดเข้า memory
-async function writeFileInChunks(
-  ffmpeg: FFmpeg,
-  fileName: string,
-  file: File,
-  onProgress?: (percent: number) => void
-): Promise<void> {
-  const CHUNK_SIZE = 64 * 1024 * 1024; // 64 MB ต่อ chunk
-  
-  // สร้างไฟล์เปล่าในระบบไฟล์ของ FFmpeg
-  await ffmpeg.writeFile(fileName, new Uint8Array(0));
-  
-  let offset = 0;
-  while (offset < file.size) {
-    const chunk = file.slice(offset, offset + CHUNK_SIZE);
-    const arrayBuffer = await chunk.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    
-    // เขียน append ต่อท้ายไฟล์
-    await ffmpeg.writeFile(fileName, uint8Array, { append: true });
-    
-    offset += CHUNK_SIZE;
-    if (onProgress) {
-      onProgress(Math.round((offset / file.size) * 100));
-    }
-  }
 }
 
 // ดึงข้อมูลภาษาของ subtitle tracks จาก ffmpeg log
@@ -72,13 +45,12 @@ async function getSubtitleLanguages(ffmpeg: FFmpeg, inputName: string): Promise<
 
 export async function extractSubtitlesAndAttachments(
   file: File,
-  ffmpeg: FFmpeg,
-  onProgress?: (percent: number) => void
+  ffmpeg: FFmpeg
 ): Promise<{ name: string; data: Uint8Array; type: 'subtitle' | 'attachment' | 'other' }[]> {
   const inputName = 'input.mkv';
   
-  // ใช้ chunked write แทน fetchFile
-  await writeFileInChunks(ffmpeg, inputName, file, onProgress);
+  // ใช้ fetchFile แบบเดิม (รองรับไฟล์ < 2GB)
+  await ffmpeg.writeFile(inputName, await fetchFile(file));
 
   const subLanguages = await getSubtitleLanguages(ffmpeg, inputName);
   console.log('Detected subtitle languages:', subLanguages);
