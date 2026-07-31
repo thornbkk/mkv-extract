@@ -5,7 +5,7 @@
 
 <script>
   import { onMount } from 'svelte';
-  import { createFFmpeg } from '@ffmpeg/ffmpeg';
+  import { FFmpeg } from '@ffmpeg/ffmpeg';
   import JSZip from 'jszip';
 
   let ffmpeg = null;
@@ -18,16 +18,14 @@
 
   onMount(async () => {
     try {
-      ffmpeg = createFFmpeg({
-        log: true,
-        progress: ({ ratio }) => {
-          progress = Math.round(ratio * 100);
-        }
+      ffmpeg = new FFmpeg();
+
+      ffmpeg.on('log', ({ message }) => {
+        console.log('[ffmpeg]', message);
       });
 
-      ffmpeg.setLogger(({ type, message }) => {
-        if (type === 'fferr') console.warn('[ffmpeg]', message);
-        else console.log('[ffmpeg]', message);
+      ffmpeg.on('progress', ({ progress: p }) => {
+        progress = Math.round(p * 100);
       });
 
       await ffmpeg.load();
@@ -41,24 +39,23 @@
 
   function startLogCapture() {
     capturedLogs = [];
-    ffmpeg.setLogger(({ type, message }) => {
-      if (type === 'fferr') capturedLogs.push(message);
+    ffmpeg.on('log', ({ message }) => {
+      capturedLogs.push(message);
     });
   }
 
   function stopLogCapture() {
-    ffmpeg.setLogger(({ type, message }) => {
-      if (type === 'fferr') console.warn('[ffmpeg]', message);
-      else console.log('[ffmpeg]', message);
+    ffmpeg.on('log', ({ message }) => {
+      console.log('[ffmpeg]', message);
     });
   }
 
   async function detectSubtitleLanguages(inputPath) {
     startLogCapture();
     try {
-      await ffmpeg.run('-i', inputPath);
+      await ffmpeg.exec(['-i', inputPath]);
     } catch (e) {
-      // ปกติ
+      // ปกติของ ffprobe ผ่าน -i ไม่มี output file จะ throw error
     }
     stopLogCapture();
 
@@ -92,8 +89,8 @@
     const inputPath = mountPoint + '/' + file.name;
 
     try {
-      // ✅ ใช้ WORKERFS ผ่าน ffmpeg.FS('mount', ...) แทน ffmpeg.mount()
-      ffmpeg.FS('mount', 'WORKERFS', { files: [file] }, mountPoint);
+      // ✅ ใช้ WORKERFS แทนการเขียนไฟล์เข้า Memory!
+      await ffmpeg.mount('WORKERFS', { files: [file] }, mountPoint);
       console.log('WORKERFS mounted at', mountPoint, 'file:', file.name, 'size:', file.size);
 
       const languages = await detectSubtitleLanguages(inputPath);
@@ -103,8 +100,8 @@
       for (let i = 0; i < 20; i++) {
         const outName = `subtitle_${i}.srt`;
         try {
-          await ffmpeg.run('-i', inputPath, '-map', `0:s:${i}`, '-c:s', 'copy', outName);
-          const data = ffmpeg.FS('readFile', outName);
+          await ffmpeg.exec(['-i', inputPath, '-map', `0:s:${i}`, '-c:s', 'copy', outName]);
+          const data = await ffmpeg.readFile(outName);
 
           if (data.length > 10) {
             const lang = languages[i] || `${i + 1}`;
@@ -114,7 +111,7 @@
               type: 'subtitle'
             });
           }
-          ffmpeg.FS('unlink', outName);
+          await ffmpeg.deleteFile(outName);
         } catch (e) {
           console.log('Stop subtitle extraction at index', i, e.message || '');
           break;
@@ -125,8 +122,8 @@
       for (let i = 0; i < 20; i++) {
         const outName = `attachment_${i}`;
         try {
-          await ffmpeg.run('-i', inputPath, '-map', `0:t:${i}`, '-c', 'copy', outName);
-          const data = ffmpeg.FS('readFile', outName);
+          await ffmpeg.exec(['-i', inputPath, '-map', `0:t:${i}`, '-c', 'copy', outName]);
+          const data = await ffmpeg.readFile(outName);
 
           if (data.length > 0) {
             extracted.push({
@@ -135,15 +132,14 @@
               type: 'attachment'
             });
           }
-          ffmpeg.FS('unlink', outName);
+          await ffmpeg.deleteFile(outName);
         } catch (e) {
           console.log('Stop attachment extraction at index', i, e.message || '');
           break;
         }
       }
 
-      // Unmount ผ่าน FS('unmount', ...)
-      ffmpeg.FS('unmount', mountPoint);
+      await ffmpeg.unmount(mountPoint);
       console.log('WORKERFS unmounted');
 
       if (extracted.length === 0) {
@@ -205,7 +201,7 @@
     } catch (err) {
       status = 'เกิดข้อผิดพลาด: ' + err.message;
       console.error(err);
-      try { ffmpeg.FS('unmount', mountPoint); } catch (e) {}
+      try { await ffmpeg.unmount(mountPoint); } catch (e) {}
     } finally {
       isProcessing = false;
       progress = 0;
