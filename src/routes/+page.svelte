@@ -1,5 +1,4 @@
 <script>
-  import { coi } from 'coi-serviceworker';
   import { onMount } from 'svelte';
   import { createFFmpeg } from '@ffmpeg/ffmpeg';
   import JSZip from 'jszip';
@@ -13,8 +12,12 @@
   let capturedLogs = [];
 
   onMount(async () => {
-    // เปิดใช้งาน SharedArrayBuffer บน GitHub Pages
-    coi();
+    // โหลด coi-serviceworker เพื่อเปิดใช้งาน SharedArrayBuffer บน GitHub Pages
+    try {
+      await import('coi-serviceworker');
+    } catch (e) {
+      console.log('COI serviceworker info:', e.message);
+    }
 
     try {
       ffmpeg = createFFmpeg({
