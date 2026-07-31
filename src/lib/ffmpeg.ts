@@ -18,12 +18,46 @@ export async function loadFFmpeg(onProgress?: (progress: number) => void): Promi
   return ffmpeg;
 }
 
+// ดึงข้อมูลภาษาของ subtitle tracks จาก ffmpeg log
+async function getSubtitleLanguages(ffmpeg: FFmpeg, inputName: string): Promise<string[]> {
+  const languages: string[] = [];
+  const logs: string[] = [];
+  
+  const originalLogHandler = (ffmpeg as any)._logEventCallback;
+  
+  ffmpeg.on('log', ({ message }) => {
+    logs.push(message);
+  });
+
+  try {
+    // รัน ffmpeg เพื่อดึงข้อมูล streams (จะ fail แต่เราได้ log แล้ว)
+    await ffmpeg.exec(['-i', inputName]);
+  } catch (e) {
+    // ไม่ต้องทำอะไร เราแค่ต้องการ log
+  }
+
+  // Parse log หาบรรทัดที่มี Stream #0:X(yyy): Subtitle:
+  // เก็บภาษาตามลำดับที่เจอ
+  for (const line of logs) {
+    const match = line.match(/Stream #0:\d+\((\w{2,3})\):\s*Subtitle:/);
+    if (match && match[1]) {
+      languages.push(match[1]);
+    }
+  }
+
+  return languages;
+}
+
 export async function extractSubtitlesAndAttachments(
   file: File,
   ffmpeg: FFmpeg
 ): Promise<{ name: string; data: Uint8Array; type: 'subtitle' | 'attachment' | 'other' }[]> {
   const inputName = 'input.mkv';
   await ffmpeg.writeFile(inputName, await fetchFile(file));
+
+  // ดึงข้อมูลภาษาก่อน
+  const subLanguages = await getSubtitleLanguages(ffmpeg, inputName);
+  console.log('Detected subtitle languages:', subLanguages);
 
   const results: { name: string; data: Uint8Array; type: 'subtitle' | 'attachment' | 'other' }[] = [];
 
@@ -52,8 +86,10 @@ export async function extractSubtitlesAndAttachments(
       
       // ตรวจสอบว่ามีข้อมูลจริงๆ
       if (uint8Data.length > 10) {
+        // ใช้ภาษาจาก metadata ถ้ามี ไม่มีก็ใช้ตัวเลข
+        const lang = subLanguages[subIndex] || `${subIndex + 1}`;
         results.push({ 
-          name: `subtitle_${subIndex + 1}.srt`, 
+          name: `[${lang}].srt`, 
           data: uint8Data, 
           type: 'subtitle' 
         });
