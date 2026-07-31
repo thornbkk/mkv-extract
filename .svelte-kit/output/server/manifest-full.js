@@ -10,7 +10,7 @@ return {
 	assets: new Set([".nojekyll","coi-serviceworker.js"]),
 	mimeTypes: {".js":"text/javascript"},
 	_: {
-		client: {start:"_app/immutable/entry/start.CVLJntaD.js",app:"_app/immutable/entry/app.D1qMR6HH.js",imports:["_app/immutable/entry/start.CVLJntaD.js","_app/immutable/chunks/BCTfO0XQ.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/entry/app.D1qMR6HH.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/chunks/BbDsTYWY.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.lVYgOWJ5.js",app:"_app/immutable/entry/app.CHsaoV28.js",imports:["_app/immutable/entry/start.lVYgOWJ5.js","_app/immutable/chunks/jnQB8MK_.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/entry/app.CHsaoV28.js","_app/immutable/chunks/C1FmrZbK.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/chunks/BbDsTYWY.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),

@@ -5,7 +5,6 @@
 
 <script>
   import { onMount } from 'svelte';
-  import { FFmpeg } from '@ffmpeg/ffmpeg';
   import JSZip from 'jszip';
 
   let ffmpeg = null;
@@ -18,6 +17,8 @@
 
   onMount(async () => {
     try {
+      // ✅ Dynamic import ใน browser เพื่อหลีกเลี่ยง Node.js empty module
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
       ffmpeg = new FFmpeg();
 
       ffmpeg.on('log', ({ message }) => {
