@@ -53,7 +53,9 @@
         let newName: string;
         
         if (r.type === 'subtitle') {
-          newName = `${baseName}_subtitle_${i + 1}.${ext}`;
+          // ใช้ชื่อจาก ffmpeg.ts ที่มี [lang] อยู่แล้ว
+          const langName = r.name.replace(`.${ext}`, '');
+          newName = `${baseName}${langName}.${ext}`;
         } else {
           newName = `${baseName}_attachment_${i + 1}.${ext}`;
         }
