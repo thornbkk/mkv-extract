@@ -1,3 +1,8 @@
+<svelte:head>
+  <!-- โหลด coi-serviceworker ก่อน JS อื่น เพื่อเปิดใช้งาน SharedArrayBuffer -->
+  <script src="/coi-serviceworker.js"></script>
+</svelte:head>
+
 <script>
   import { onMount } from 'svelte';
   import { createFFmpeg } from '@ffmpeg/ffmpeg';
@@ -12,13 +17,6 @@
   let capturedLogs = [];
 
   onMount(async () => {
-    // โหลด coi-serviceworker เพื่อเปิดใช้งาน SharedArrayBuffer บน GitHub Pages
-    try {
-      await import('coi-serviceworker');
-    } catch (e) {
-      console.log('COI serviceworker info:', e.message);
-    }
-
     try {
       ffmpeg = createFFmpeg({
         log: true,
@@ -244,11 +242,6 @@
     }
   }
 </script>
-
-<svelte:head>
-  <title>MKV Extractor - แยก subtitle จาก MKV</title>
-  <meta name="description" content="แยก subtitle และ attachment จากไฟล์ MKV โดยตรงในเบราว์เซอร์ รองรับไฟล์ขนาดใหญ่ 10GB+">
-</svelte:head>
 
 <main>
   <div class="container">

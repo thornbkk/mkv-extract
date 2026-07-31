@@ -7,10 +7,10 @@ function __memo(fn) {
 return {
 	appDir: "_app",
 	appPath: "mkv-extract/_app",
-	assets: new Set([".nojekyll"]),
-	mimeTypes: {},
+	assets: new Set([".nojekyll","coi-serviceworker.js"]),
+	mimeTypes: {".js":"text/javascript"},
 	_: {
-		client: {start:"_app/immutable/entry/start.DKNjZUCM.js",app:"_app/immutable/entry/app.4AB4Ybsq.js",imports:["_app/immutable/entry/start.DKNjZUCM.js","_app/immutable/chunks/B0bpxnih.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/entry/app.4AB4Ybsq.js","_app/immutable/chunks/C1FmrZbK.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/chunks/BbDsTYWY.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.IQYFq5Mm.js",app:"_app/immutable/entry/app.J1xUmAKa.js",imports:["_app/immutable/entry/start.IQYFq5Mm.js","_app/immutable/chunks/yih4_xvY.js","_app/immutable/chunks/Dlc_SMu7.js","_app/immutable/entry/app.J1xUmAKa.js","_app/immutable/chunks/Dlc_SMu7.js","_app/immutable/chunks/WM1jwZIC.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),
