@@ -29,18 +29,16 @@ export async function extractSubtitlesAndAttachments(
 
   // แยก subtitle tracks ทีละตัว
   let subIndex = 0;
-  while (subIndex < 20) { // จำกัด safety loop
-    const outputName = `subtitle_${subIndex}.ass`;
+  while (subIndex < 20) {
+    const outputName = `subtitle_${subIndex}.srt`;
     try {
-      // ffmpeg.exec จะ resolve เมื่อสำเร็จ หรือ throw เมื่อล้มเหลว
       await ffmpeg.exec([
         '-i', inputName,
         '-map', `0:s:${subIndex}`,
-        '-c', 'copy',
+        '-c:s', 'copy',
         outputName
       ]);
       
-      // ถ้าถึงบรรทัดนี้ = สำเร็จ
       const data = await ffmpeg.readFile(outputName);
       let uint8Data: Uint8Array;
       
@@ -54,19 +52,8 @@ export async function extractSubtitlesAndAttachments(
       
       // ตรวจสอบว่ามีข้อมูลจริงๆ
       if (uint8Data.length > 10) {
-        // ตรวจสอบ format จากเนื้อหา
-        const preview = new TextDecoder('utf-8', { fatal: false }).decode(uint8Data.slice(0, 200));
-        let ext = 'ass';
-        if (preview.includes('[Script Info]') || preview.includes('Dialogue:')) {
-          ext = 'ass';
-        } else if (preview.match(/^\d+\s*\r?\n\d{2}:\d{2}:\d{2}/)) {
-          ext = 'srt';
-        } else if (preview.includes('WEBVTT')) {
-          ext = 'vtt';
-        }
-        
         results.push({ 
-          name: `subtitle_${subIndex + 1}.${ext}`, 
+          name: `subtitle_${subIndex + 1}.srt`, 
           data: uint8Data, 
           type: 'subtitle' 
         });
@@ -75,7 +62,6 @@ export async function extractSubtitlesAndAttachments(
       await ffmpeg.deleteFile(outputName);
       subIndex++;
     } catch (e) {
-      // ไม่มี track นี้ หรือ extract ไม่ได้ = หยุด loop
       console.log('Stop subtitle extraction at index', subIndex);
       break;
     }
