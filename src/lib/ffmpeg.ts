@@ -18,44 +18,6 @@ export async function loadFFmpeg(onProgress?: (progress: number) => void): Promi
   return ffmpeg;
 }
 
-export async function extractStreams(
-  file: File,
-  ffmpeg: FFmpeg
-): Promise<{ name: string; data: Uint8Array }[]> {
-  const inputName = 'input.mkv';
-  const outputDir = 'extracted';
-  
-  // เขียนไฟล์เข้าไปในระบบไฟล์เสมือนของ FFmpeg
-  await ffmpeg.writeFile(inputName, await fetchFile(file));
-  
-  // ใช้คำสั่ง ffmpeg แยก streams ทั้งหมด
-  await ffmpeg.createDir(outputDir);
-  await ffmpeg.exec([
-    '-i', inputName,
-    '-map', '0',
-    '-c', 'copy',
-    '-f', 'segment',
-    '-segment_format', 'rawvideo',
-    `${outputDir}/stream_%d`
-  ]);
-
-  // อ่านรายชื่อไฟล์ที่แยกได้
-  const files = await ffmpeg.listDir(outputDir);
-  const results: { name: string; data: Uint8Array }[] = [];
-
-  for (const f of files) {
-    if (f.name === '.' || f.name === '..') continue;
-    const data = await ffmpeg.readFile(`${outputDir}/${f.name}`) as Uint8Array;
-    results.push({ name: f.name, data });
-  }
-
-  // ล้างไฟล์ชั่วคราว
-  await ffmpeg.deleteDir(outputDir);
-  await ffmpeg.deleteFile(inputName);
-
-  return results;
-}
-
 export async function extractSubtitlesAndAttachments(
   file: File,
   ffmpeg: FFmpeg
@@ -63,41 +25,59 @@ export async function extractSubtitlesAndAttachments(
   const inputName = 'input.mkv';
   await ffmpeg.writeFile(inputName, await fetchFile(file));
 
-  // ดึงข้อมูล streams ก่อน
-  const probeResult = await ffmpeg.exec([
-    '-i', inputName,
-    '-hide_banner'
-  ]).catch(() => {}); // ffmpeg จะ return error code เมื่อ probe แต่เราต้องการแค่ log
+  const results: { name: string; data: Uint8Array; type: 'subtitle' | 'attachment' | 'other' }[] = [];
 
-  // แยก subtitle tracks (srt, ass, ssa, vtt)
-  await ffmpeg.exec([
-    '-i', inputName,
-    '-map', '0:s',
-    '-c', 'copy',
-    'subtitle_%d.ass'
-  ]).catch(() => {});
+  // แยก subtitle tracks ทีละตัว
+  let subIndex = 0;
+  while (true) {
+    const outputName = `subtitle_${subIndex}.ass`;
+    try {
+      const exitCode = await ffmpeg.exec([
+        '-i', inputName,
+        '-map', `0:s:${subIndex}`,
+        '-c', 'copy',
+        outputName
+      ]);
+      
+      if (exitCode !== 0) break;
+      
+      const data = await ffmpeg.readFile(outputName);
+      const uint8Data = data instanceof Uint8Array ? data : new TextEncoder().encode(data);
+      
+      if (uint8Data.length > 0) {
+        results.push({ name: outputName, data: uint8Data, type: 'subtitle' });
+      }
+      await ffmpeg.deleteFile(outputName);
+      subIndex++;
+    } catch (e) {
+      break;
+    }
+  }
 
   // แยก attachments (fonts, รูปภาพ, ฯลฯ)
-  await ffmpeg.exec([
-    '-i', inputName,
-    '-map', '0:t',
-    '-c', 'copy',
-    'attachment_%d'
-  ]).catch(() => {});
-
-  // เก็บผลลัพธ์
-  const results: { name: string; data: Uint8Array; type: 'subtitle' | 'attachment' | 'other' }[] = [];
-  const dir = await ffmpeg.listDir('.');
-
-  for (const f of dir) {
-    if (f.name.startsWith('subtitle_')) {
-      const data = await ffmpeg.readFile(f.name) as Uint8Array;
-      results.push({ name: f.name.replace(/\.ass$/, '.ass'), data, type: 'subtitle' });
-      await ffmpeg.deleteFile(f.name);
-    } else if (f.name.startsWith('attachment_')) {
-      const data = await ffmpeg.readFile(f.name) as Uint8Array;
-      results.push({ name: f.name, data, type: 'attachment' });
-      await ffmpeg.deleteFile(f.name);
+  let attIndex = 0;
+  while (true) {
+    const outputName = `attachment_${attIndex}`;
+    try {
+      const exitCode = await ffmpeg.exec([
+        '-i', inputName,
+        '-map', `0:t:${attIndex}`,
+        '-c', 'copy',
+        outputName
+      ]);
+      
+      if (exitCode !== 0) break;
+      
+      const data = await ffmpeg.readFile(outputName);
+      const uint8Data = data instanceof Uint8Array ? data : new TextEncoder().encode(data);
+      
+      if (uint8Data.length > 0) {
+        results.push({ name: outputName, data: uint8Data, type: 'attachment' });
+      }
+      await ffmpeg.deleteFile(outputName);
+      attIndex++;
+    } catch (e) {
+      break;
     }
   }
 
