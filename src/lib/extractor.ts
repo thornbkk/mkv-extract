@@ -1,5 +1,4 @@
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
 
 export async function createZip(files: { name: string; data: Uint8Array }[]): Promise<Blob> {
   const zip = new JSZip();
@@ -12,5 +11,12 @@ export async function createZip(files: { name: string; data: Uint8Array }[]): Pr
 }
 
 export function downloadFile(blob: Blob, filename: string) {
-  saveAs(blob, filename);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
