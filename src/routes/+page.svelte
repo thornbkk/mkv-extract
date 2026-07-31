@@ -1,4 +1,5 @@
 <script>
+  import { coi } from 'coi-serviceworker';
   import { onMount } from 'svelte';
   import { createFFmpeg } from '@ffmpeg/ffmpeg';
   import JSZip from 'jszip';
@@ -12,6 +13,9 @@
   let capturedLogs = [];
 
   onMount(async () => {
+    // เปิดใช้งาน SharedArrayBuffer บน GitHub Pages
+    coi();
+
     try {
       ffmpeg = createFFmpeg({
         log: true,
@@ -90,9 +94,7 @@
     const inputPath = mountPoint + '/' + file.name;
 
     try {
-      // ✅ จุดเปลี่ยนสำคัญ: ใช้ WORKERFS แทนการเขียนไฟล์เข้า Memory!
-      // File object จาก Browser จะถูก mount เข้า WASM FS โดยตรง
-      // WASM จะอ่านทีละ chunk ตามต้องการ ไม่โหลดทั้งไฟล์เข้า RAM
+      // ✅ ใช้ WORKERFS แทนการเขียนไฟล์เข้า Memory!
       await ffmpeg.mount('WORKERFS', { files: [file] }, mountPoint);
       console.log('WORKERFS mounted at', mountPoint, 'file:', file.name, 'size:', file.size);
 
@@ -153,7 +155,7 @@
         return;
       }
 
-      // จัดชื่อไฟล์ใหม่ (ตรวจสอบชื่อซ้ำ ตาม logic เดิม)
+      // จัดชื่อไฟล์ใหม่ (ตรวจสอบชื่อซ้ำ)
       const subtitleCounts = {};
       for (const item of extracted) {
         if (item.type === 'subtitle') {
