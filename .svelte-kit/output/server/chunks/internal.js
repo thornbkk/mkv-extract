@@ -184,7 +184,7 @@ const options = {
     app: ({ head, body, assets, nonce, env }) => '<!DOCTYPE html>\n<html lang="th">\n<head>\n	<meta charset="utf-8" />\n	<meta name="viewport" content="width=device-width, initial-scale=1" />\n	<!-- โหลด coi-serviceworker ก่อน JS อื่น เพื่อเปิด SharedArrayBuffer -->\n	<script src="' + assets + '/coi-serviceworker.js"><\/script>\n	' + head + '\n</head>\n<body data-sveltekit-preload-data="hover">\n	<div style="display: contents">' + body + "</div>\n</body>\n</html>\n",
     error
   },
-  version_hash: "ug82m0"
+  version_hash: "1wz8xbr"
 };
 async function get_hooks() {
   let handle;

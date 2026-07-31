@@ -10,7 +10,7 @@ return {
 	assets: new Set([".nojekyll","coi-serviceworker.js"]),
 	mimeTypes: {".js":"text/javascript"},
 	_: {
-		client: {start:"_app/immutable/entry/start.DaTOL_km.js",app:"_app/immutable/entry/app.D6u-NLDZ.js",imports:["_app/immutable/entry/start.DaTOL_km.js","_app/immutable/chunks/BML_SUjt.js","_app/immutable/chunks/Dlc_SMu7.js","_app/immutable/entry/app.D6u-NLDZ.js","_app/immutable/chunks/Dlc_SMu7.js","_app/immutable/chunks/WM1jwZIC.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.BHsYUqFk.js",app:"_app/immutable/entry/app.BsGWMCVN.js",imports:["_app/immutable/entry/start.BHsYUqFk.js","_app/immutable/chunks/CWyCyTSs.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/entry/app.BsGWMCVN.js","_app/immutable/chunks/B2QSKqcC.js","_app/immutable/chunks/BbDsTYWY.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),

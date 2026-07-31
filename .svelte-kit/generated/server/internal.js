@@ -26,7 +26,7 @@ export const options = {
 		app: ({ head, body, assets, nonce, env }) => "<!DOCTYPE html>\n<html lang=\"th\">\n<head>\n\t<meta charset=\"utf-8\" />\n\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\t<!-- โหลด coi-serviceworker ก่อน JS อื่น เพื่อเปิด SharedArrayBuffer -->\n\t<script src=\"" + assets + "/coi-serviceworker.js\"></script>\n\t" + head + "\n</head>\n<body data-sveltekit-preload-data=\"hover\">\n\t<div style=\"display: contents\">" + body + "</div>\n</body>\n</html>\n",
 		error
 	},
-	version_hash: "5zlif0"
+	version_hash: "1cbugu"
 };
 
 export async function get_hooks() {

@@ -1,6 +1,6 @@
 <svelte:head>
-  <!-- โหลด coi-serviceworker ก่อน JS อื่น เพื่อเปิดใช้งาน SharedArrayBuffer -->
-  <script src="/coi-serviceworker.js"></script>
+  <title>MKV Extractor - แยก subtitle จาก MKV</title>
+  <meta name="description" content="แยก subtitle และ attachment จากไฟล์ MKV โดยตรงในเบราว์เซอร์ รองรับไฟล์ขนาดใหญ่ 10GB+">
 </svelte:head>
 
 <script>
@@ -25,7 +25,6 @@
         }
       });
 
-      // Default logger
       ffmpeg.setLogger(({ type, message }) => {
         if (type === 'fferr') console.warn('[ffmpeg]', message);
         else console.log('[ffmpeg]', message);
@@ -59,16 +58,14 @@
     try {
       await ffmpeg.run('-i', inputPath);
     } catch (e) {
-      // ปกติของ ffprobe ผ่าน -i ไม่มี output file จะ throw error
+      // ปกติ
     }
     stopLogCapture();
 
     const languages = [];
     for (const line of capturedLogs) {
       const match = line.match(/Stream #0:\d+\((\w{2,3})\):\s*Subtitle:/);
-      if (match && match[1]) {
-        languages.push(match[1]);
-      }
+      if (match && match[1]) languages.push(match[1]);
     }
     return languages;
   }
@@ -95,15 +92,14 @@
     const inputPath = mountPoint + '/' + file.name;
 
     try {
-      // ✅ ใช้ WORKERFS แทนการเขียนไฟล์เข้า Memory!
-      await ffmpeg.mount('WORKERFS', { files: [file] }, mountPoint);
+      // ✅ ใช้ WORKERFS ผ่าน ffmpeg.FS('mount', ...) แทน ffmpeg.mount()
+      ffmpeg.FS('mount', 'WORKERFS', { files: [file] }, mountPoint);
       console.log('WORKERFS mounted at', mountPoint, 'file:', file.name, 'size:', file.size);
 
-      // ตรวจหาภาษาซับ
       const languages = await detectSubtitleLanguages(inputPath);
       console.log('Detected subtitle languages:', languages);
 
-      // แยก subtitle แต่ละ track
+      // แยก subtitle
       for (let i = 0; i < 20; i++) {
         const outName = `subtitle_${i}.srt`;
         try {
@@ -125,7 +121,7 @@
         }
       }
 
-      // แยก attachment แต่ละ track
+      // แยก attachment
       for (let i = 0; i < 20; i++) {
         const outName = `attachment_${i}`;
         try {
@@ -146,8 +142,8 @@
         }
       }
 
-      // Unmount WORKERFS (cleanup)
-      await ffmpeg.unmount(mountPoint);
+      // Unmount ผ่าน FS('unmount', ...)
+      ffmpeg.FS('unmount', mountPoint);
       console.log('WORKERFS unmounted');
 
       if (extracted.length === 0) {
@@ -156,7 +152,7 @@
         return;
       }
 
-      // จัดชื่อไฟล์ใหม่ (ตรวจสอบชื่อซ้ำ)
+      // จัดชื่อไฟล์
       const subtitleCounts = {};
       for (const item of extracted) {
         if (item.type === 'subtitle') {
@@ -189,7 +185,6 @@
         return { ...item, name };
       });
 
-      // สร้าง ZIP
       status = `พบ ${finalFiles.length} ไฟล์ กำลังบีบอัดเป็น ZIP...`;
       const zip = new JSZip();
       for (const f of finalFiles) {
@@ -210,7 +205,7 @@
     } catch (err) {
       status = 'เกิดข้อผิดพลาด: ' + err.message;
       console.error(err);
-      try { await ffmpeg.unmount(mountPoint); } catch (e) {}
+      try { ffmpeg.FS('unmount', mountPoint); } catch (e) {}
     } finally {
       isProcessing = false;
       progress = 0;
@@ -221,9 +216,7 @@
     e.preventDefault();
     isDragOver = false;
     const files = e.dataTransfer.files;
-    if (files.length > 0 && !isProcessing) {
-      extractFile(files[0]);
-    }
+    if (files.length > 0 && !isProcessing) extractFile(files[0]);
   }
 
   function handleDragOver(e) {
@@ -237,9 +230,7 @@
 
   function handleFileSelect(e) {
     const files = e.target.files;
-    if (files.length > 0 && !isProcessing) {
-      extractFile(files[0]);
-    }
+    if (files.length > 0 && !isProcessing) extractFile(files[0]);
   }
 </script>
 
