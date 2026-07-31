@@ -46,16 +46,34 @@
         return;
       }
 
-      // สร้างชื่อไฟล์ที่อ่านง่ายขึ้น
       const baseName = file.name.replace(/\.(mkv|webm)$/i, '');
+
+      // นับจำนวน track แต่ละภาษา
+      const langCounts: Record<string, number> = {};
+      for (const r of results) {
+        if (r.type === 'subtitle') {
+          const ext = r.name.split('.').pop() || 'srt';
+          const lang = r.name.replace(`.${ext}`, '').replace(/^\[/, '').replace(/\]$/, '');
+          langCounts[lang] = (langCounts[lang] || 0) + 1;
+        }
+      }
+
+      const langSeen: Record<string, number> = {};
       const renamedResults = results.map((r, i) => {
         let ext = r.name.split('.').pop() || 'bin';
         let newName: string;
         
         if (r.type === 'subtitle') {
-          // ใช้ชื่อจาก ffmpeg.ts ที่มี [lang] อยู่แล้ว
           const langName = r.name.replace(`.${ext}`, '');
-          newName = `${baseName}${langName}.${ext}`;
+          const langCode = langName.replace(/^\[/, '').replace(/\]$/, '');
+          
+          langSeen[langCode] = (langSeen[langCode] || 0) + 1;
+          
+          if (langCounts[langCode] > 1) {
+            newName = `${baseName}${langName}_track${i + 1}.${ext}`;
+          } else {
+            newName = `${baseName}${langName}.${ext}`;
+          }
         } else {
           newName = `${baseName}_attachment_${i + 1}.${ext}`;
         }
