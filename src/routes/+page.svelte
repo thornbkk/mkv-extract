@@ -1,26 +1,23 @@
 <script>
-  import { onMount } from 'svelte';
-  import { browser } from '$app/environment';
+  import { extractSubtitlesFromMKV, convertToSubtitleFile, getLanguageFullName } from '$lib/ebml.js';
   import JSZip from 'jszip';
 
-  let ffmpeg = null;
-  let fetchFile = null;
-  let loaded = false;
-  let loading = false;
   let file = null;
   let tracks = [];
-  let extracting = false;
-  let logMessages = [];
+  let parsing = false;
+  let progressText = '';
+  let progressPercent = 0;
   let errorMsg = '';
   let dragOver = false;
   let fileInput;
 
-  const CORE_JS_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js';
-  const CORE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm';
-
   function log(msg) {
     console.log(`[MKV Extractor] ${msg}`);
-    logMessages = [...logMessages, msg];
+  }
+
+  function getBaseName() {
+    if (!file) return 'subtitle';
+    return file.name.replace(/\.mkv$/i, '').replace(/[^a-zA-Z0-9\u0E00-\u0E7F\s]/g, '_').replace(/\s+/g, '_');
   }
 
   function downloadBlob(blob, filename) {
@@ -34,77 +31,14 @@
     URL.revokeObjectURL(url);
   }
 
-  async function toBlobURL(url, mimeType) {
-    log(`Downloading ${url.split('/').pop()}...`);
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-    const blob = await resp.blob();
-    return URL.createObjectURL(new Blob([blob], { type: mimeType }));
-  }
-
-  async function initFFmpeg() {
-    if (loaded || loading) return;
-    loading = true;
-    errorMsg = '';
-    log('กำลังโหลด FFmpeg...');
-
-    try {
-      log('Importing @ffmpeg/ffmpeg...');
-      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-      log('Importing @ffmpeg/util...');
-      const util = await import('@ffmpeg/util');
-      fetchFile = util.fetchFile;
-      log('Modules imported successfully');
-
-      log('Creating FFmpeg instance...');
-      ffmpeg = new FFmpeg();
-      
-      ffmpeg.on('log', ({ message, type }) => {
-        if (type === 'stderr' || message.toLowerCase().includes('error')) {
-          log(`FFmpeg: ${message}`);
-        }
-      });
-
-      ffmpeg.on('progress', ({ progress: p }) => {
-        log(`Progress: ${(p * 100).toFixed(0)}%`);
-      });
-
-      log('Fetching core files from CDN...');
-      const coreURL = await toBlobURL(CORE_JS_URL, 'text/javascript');
-      const wasmURL = await toBlobURL(CORE_WASM_URL, 'application/wasm');
-
-      log('Calling ffmpeg.load()...');
-      await ffmpeg.load({ coreURL, wasmURL });
-
-      loaded = true;
-      log('✅ FFmpeg พร้อมใช้งาน');
-    } catch (err) {
-      errorMsg = `โหลด FFmpeg ไม่สำเร็จ: ${err?.message || err}`;
-      log(errorMsg);
-      console.error('FFmpeg load error:', err);
-    } finally {
-      loading = false;
-    }
-  }
-
-  // Auto-load FFmpeg เมื่อเปิดหน้า
-  onMount(async () => {
-    if (!browser) return;
-    log('Browser ready, auto-loading FFmpeg...');
-    await initFFmpeg();
-  });
-
   function handleFile(selected) {
     if (!selected) return;
     const sizeMB = selected.size / 1024 / 1024;
-    
-    // แค่เตือน ไม่ block
-    if (sizeMB > 1000) {
-      log(`⚠️ ไฟล์ใหญ่มาก (${sizeMB.toFixed(0)} MB) อาจทำให้เบราว์เซอร์ค้าง`);
-    }
-    
     file = selected;
     tracks = [];
+    errorMsg = '';
+    progressText = '';
+    progressPercent = 0;
     log(`เลือกไฟล์: ${selected.name} (${sizeMB.toFixed(2)} MB)`);
   }
 
@@ -135,7 +69,6 @@
         handleFile(mkvFile);
       } else {
         errorMsg = 'กรุณาลากไฟล์ .mkv เท่านั้น';
-        log(errorMsg);
       }
     }
   }
@@ -145,125 +78,78 @@
   }
 
   async function extractSubtitles() {
-    if (!file || !loaded || !ffmpeg) {
-      log('ยังไม่พร้อม: file=' + !!file + ' loaded=' + loaded + ' ffmpeg=' + !!ffmpeg);
-      return;
-    }
+    if (!file) return;
     
-    extracting = true;
+    parsing = true;
     tracks = [];
     errorMsg = '';
-    logMessages = [];
-    log('เริ่มกระบวนการ...');
-
-    const inputName = 'input.mkv';
-    let zip = new JSZip();
-    let foundTracks = [];
+    progressText = 'เริ่มต้น...';
+    progressPercent = 0;
 
     try {
-      log('กำลังอ่านไฟล์เข้า memory...');
-      const fileData = await fetchFile(file);
-      log(`fetchFile สำเร็จ (${fileData.byteLength || fileData.length} bytes)`);
+      const onProgress = (msg, pct) => {
+        progressText = msg;
+        if (typeof pct === 'number') progressPercent = pct;
+        log(msg);
+      };
+
+      const rawTracks = await extractSubtitlesFromMKV(file, onProgress);
       
-      log('กำลังเขียนไฟล์ลง FFmpeg FS...');
-      await ffmpeg.writeFile(inputName, fileData);
-      log('เขียนไฟล์สำเร็จ');
-
-      for (let i = 0; i < 10; i++) {
-        const outputName = `sub_${i}.ass`;
-        try {
-          log(`ลองดึง track ${i}...`);
-          await ffmpeg.exec([
-            '-y', '-nostats',
-            '-i', inputName,
-            '-map', `0:s:${i}`,
-            '-c', 'copy',
-            outputName
-          ]);
-          const data = await ffmpeg.readFile(outputName);
-          if (data && data.length > 10) {
-            const blob = new Blob([data]);
-            zip.file(`track_${i + 1}.ass`, blob);
-            foundTracks.push({
-              index: i,
-              name: `Track ${i + 1}`,
-              format: 'ASS/SSA',
-              size: blob.size
-            });
-            log(`✅ พบ track ${i} (${blob.size} bytes)`);
-          }
-          await ffmpeg.deleteFile(outputName);
-        } catch (execErr) {
-          log(`Track ${i}: ไม่พบหรือดึงไม่ได้`);
-          if (i === 0 && foundTracks.length === 0) {
-            try {
-              const srtName = `sub_${i}.srt`;
-              await ffmpeg.exec([
-                '-y', '-nostats',
-                '-i', inputName,
-                '-map', `0:s:${i}`,
-                '-c', 'copy',
-                srtName
-              ]);
-              const data = await ffmpeg.readFile(srtName);
-              if (data && data.length > 10) {
-                const blob = new Blob([data]);
-                zip.file(`track_${i + 1}.srt`, blob);
-                foundTracks.push({ index: i, name: `Track ${i + 1}`, format: 'SRT', size: blob.size });
-                log(`✅ พบ track ${i} เป็น SRT`);
-              }
-              await ffmpeg.deleteFile(srtName);
-            } catch (e2) {
-              break;
-            }
-          } else if (foundTracks.length > 0) {
-            break;
-          } else {
-            break;
-          }
-        }
-      }
-
-      try {
-        await ffmpeg.deleteFile(inputName);
-        for (let i = 0; i < 10; i++) {
-          try { await ffmpeg.deleteFile(`sub_${i}.ass`); } catch (e) {}
-          try { await ffmpeg.deleteFile(`sub_${i}.srt`); } catch (e) {}
-        }
-      } catch (e) {}
-
-      if (foundTracks.length > 0) {
-        tracks = foundTracks;
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        downloadBlob(zipBlob, `${file.name.replace(/\.mkv$/i, '')}_subtitles.zip`);
-        log(`🎉 เสร็จสิ้น! พบ ${foundTracks.length} track(s)`);
-      } else {
+      if (rawTracks.length === 0) {
         errorMsg = 'ไม่พบ subtitle track ในไฟล์นี้';
-        log(errorMsg);
+        parsing = false;
+        return;
       }
+
+      tracks = rawTracks.map(t => ({
+        ...t,
+        languageName: getLanguageFullName(t.languageIETF || t.language, t.name),
+        blockCount: t.blocks ? t.blocks.length : 0
+      }));
+
+      log(`พบ ${tracks.length} subtitle track(s)`);
     } catch (err) {
       errorMsg = `ผิดพลาด: ${err?.message || err}`;
-      log(errorMsg);
       console.error(err);
     } finally {
-      extracting = false;
+      parsing = false;
     }
+  }
+
+  function downloadTrack(track) {
+    const result = convertToSubtitleFile(track);
+    let blob;
+    if (result.binary) {
+      blob = new Blob([result.content], { type: 'application/octet-stream' });
+    } else {
+      blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
+    }
+    const base = getBaseName();
+    const lang = track.languageName.replace(/\s+/g, '_');
+    const nameTag = track.name ? '_' + track.name.replace(/[^a-zA-Z0-9]/g, '_') : '';
+    const filename = `${base}_${lang}_Track${track.trackNumber}${nameTag}.${result.extension}`;
+    downloadBlob(blob, filename);
+  }
+
+  async function downloadAll() {
+    if (tracks.length === 0) return;
+    const zip = new JSZip();
+    const base = getBaseName();
+    for (const track of tracks) {
+      const result = convertToSubtitleFile(track);
+      const lang = track.languageName.replace(/\s+/g, '_');
+      const nameTag = track.name ? '_' + track.name.replace(/[^a-zA-Z0-9]/g, '_') : '';
+      const filename = `${base}_${lang}_Track${track.trackNumber}${nameTag}.${result.extension}`;
+      zip.file(filename, result.content);
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `${base}_subtitles.zip`);
   }
 </script>
 
 <div class="container">
   <h1>🎬 MKV Subtitle Extractor</h1>
-  <p class="subtitle">แยก subtitle จากไฟล์ MKV โดยไม่ต้องอัปโหลดไปเซิร์ฟเวอร์</p>
-
-  {#if loading}
-    <div class="badge loading">⏳ กำลังโหลด FFmpeg...</div>
-  {:else if loaded}
-    <div class="badge">✅ FFmpeg พร้อมใช้งาน</div>
-  {:else}
-    <button class="btn-primary" on:click={initFFmpeg}>
-      🔌 โหลด FFmpeg (ลองใหม่)
-    </button>
-  {/if}
+  <p class="subtitle">แยก subtitle จากไฟล์ MKV โดยไม่ต้องอัปโหลดไปเซิร์ฟเวอร์ (Pure JS Parser)</p>
 
   <div 
     class="upload-zone"
@@ -280,58 +166,62 @@
       type="file"
       accept=".mkv,video/x-matroska"
       on:change={handleFileChange}
-      id="file-input"
       style="display: none;"
     />
     {#if !file}
       <div class="drop-icon">📁</div>
       <div>ลากไฟล์ MKV มาวางที่นี่ หรือคลิกเลือก</div>
-      {#if !loaded && !loading}
-        <div class="hint">รอ FFmpeg โหลดสำเร็จก่อน หรือคลิกปุ่มด้านบน</div>
-      {/if}
     {:else}
       <div>📄 {file.name}</div>
       <div class="file-size">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
     {/if}
   </div>
 
-  {#if file && loaded}
-    <button class="btn-primary" on:click={extractSubtitles} disabled={extracting}>
-      {extracting ? '⏳ กำลังดึง subtitle...' : '📤 ดึง Subtitle'}
+  {#if file}
+    <button class="btn-primary" on:click={extractSubtitles} disabled={parsing}>
+      {parsing ? '⏳ กำลังอ่านไฟล์...' : '🔍 สแกน Subtitle Tracks'}
     </button>
+  {/if}
+
+  {#if parsing && progressPercent > 0}
+    <div class="progress-bar">
+      <div class="progress-fill" style="width: {progressPercent}%"></div>
+    </div>
+    <div class="progress-text">{progressText} ({progressPercent}%)</div>
   {/if}
 
   {#if errorMsg}
     <div class="error-box">❌ {errorMsg}</div>
   {/if}
 
-  {#if logMessages.length > 0}
-    <div class="log-box">
-      <strong>📝 Log:</strong>
-      {#each logMessages as msg}
-        <div class="log-line">{msg}</div>
-      {/each}
-    </div>
-  {/if}
-
   {#if tracks.length > 0}
     <div class="results">
-      <h3>📦 พบ {tracks.length} Subtitle Track(s)</h3>
-      <ul>
+      <div class="results-header">
+        <h3>📦 พบ {tracks.length} Subtitle Track(s)</h3>
+        <button class="btn-small" on:click={downloadAll}>ดาวน์โหลดทั้งหมด (ZIP)</button>
+      </div>
+      <ul class="track-list">
         {#each tracks as track}
-          <li>
-            {track.name} — {track.format} ({(track.size / 1024).toFixed(1)} KB)
+          <li class="track-item">
+            <div class="track-info">
+              <span class="track-lang">{track.languageName}</span>
+              <span class="track-codec">{track.codecId}</span>
+              {#if track.name}
+                <span class="track-name">{track.name}</span>
+              {/if}
+              <span class="track-blocks">{track.blockCount} blocks</span>
+            </div>
+            <button class="btn-small" on:click={() => downloadTrack(track)}>ดาวน์โหลด</button>
           </li>
         {/each}
       </ul>
-      <p class="success">✅ ดาวน์โหลด ZIP อัตโนมัติแล้ว</p>
     </div>
   {/if}
 </div>
 
 <style>
   .container {
-    max-width: 640px;
+    max-width: 720px;
     margin: 2rem auto;
     padding: 1.5rem;
     font-family: system-ui, -apple-system, sans-serif;
@@ -356,23 +246,17 @@
   }
   .btn-primary:hover:not(:disabled) { opacity: 0.9; }
   .btn-primary:disabled { background: #475569; cursor: not-allowed; }
-  .badge {
-    display: inline-block;
-    padding: 0.5rem 1rem;
+  .btn-small {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.875rem;
+    border: none;
+    border-radius: 6px;
     background: #059669;
     color: white;
-    border-radius: 20px;
-    font-size: 0.875rem;
-    margin-bottom: 1rem;
+    cursor: pointer;
+    white-space: nowrap;
   }
-  .badge.loading {
-    background: #d97706;
-    animation: pulse 1.5s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
+  .btn-small:hover { opacity: 0.9; }
   .upload-zone {
     border: 2px dashed #475569;
     border-radius: 12px;
@@ -386,13 +270,27 @@
     border-color: #6366f1;
     background: rgba(99, 102, 241, 0.1);
   }
-  .hint {
-    color: #94a3b8;
-    font-size: 0.8rem;
-    margin-top: 0.5rem;
-  }
   .drop-icon { font-size: 3rem; margin-bottom: 0.5rem; }
   .file-size { color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem; }
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #1e293b;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+  }
+  .progress-fill {
+    height: 100%;
+    background: #6366f1;
+    transition: width 0.3s;
+  }
+  .progress-text {
+    color: #94a3b8;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
   .error-box {
     background: #7f1d1d;
     color: #fecaca;
@@ -400,22 +298,52 @@
     border-radius: 8px;
     margin-bottom: 1rem;
   }
-  .log-box {
-    background: #1e293b;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    font-size: 0.8rem;
-    max-height: 300px;
-    overflow-y: auto;
-  }
-  .log-line { color: #cbd5e1; margin-top: 0.25rem; font-family: monospace; }
   .results {
     background: #1e293b;
     padding: 1rem;
     border-radius: 8px;
   }
-  .results h3 { margin-top: 0; color: #f8fafc; }
-  .results ul { color: #cbd5e1; }
-  .success { color: #34d399; font-weight: 600; margin-bottom: 0; }
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .results-header h3 { margin: 0; color: #f8fafc; }
+  .track-list { list-style: none; padding: 0; margin: 0; }
+  .track-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: #0f172a;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    gap: 1rem;
+  }
+  .track-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .track-lang {
+    font-weight: 600;
+    color: #f8fafc;
+  }
+  .track-codec {
+    color: #94a3b8;
+    font-size: 0.8rem;
+    background: #1e293b;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+  }
+  .track-name {
+    color: #cbd5e1;
+    font-size: 0.875rem;
+  }
+  .track-blocks {
+    color: #64748b;
+    font-size: 0.75rem;
+  }
 </style>
