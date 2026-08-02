@@ -153,7 +153,7 @@
   <div class="container">
     <div class="header-glow">
       <h1>🎬 MKV Subtitle Extractor Pro 2.0.0</h1>
-      <div class="subtitle">แยก subtitle จากไฟล์ MKV โดยไม่ต้องอัปโหลดไปเซิร์ฟเวอร์ <span class="tech-badge">Pure JS Parser</span></div>
+      <div class="subtitle">แยก subtitle จากไฟล์ MKV (Support ไฟล์ใหญ่กว่า 2 GB)<span class="tech-badge">Pure JS Parser</span></div>
     </div>
 
     <div 
