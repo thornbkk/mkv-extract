@@ -267,7 +267,7 @@
 
     <div class="footer">
       <div class="footer-line"></div>
-      <div class="footer-text">MKV Subtitle Extractor Pro 2.0.0 · Pure JS EBML Parser · ไม่มีการอัปโหลดไฟล์</div>
+      <div class="footer-text">MKV Subtitle Extractor Pro 2.0.0 · (Pure JS EBML Parser) More 2GB Supported </div>
     </div>
   </div>
 </div>
