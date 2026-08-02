@@ -148,7 +148,7 @@
 </script>
 
 <div class="container">
-  <h1>🎬 MKV Subtitle Extractor</h1>
+  <h1>🎬 MKV Subtitle Extractor Pro 2.0.0</h1>
   <p class="subtitle">แยก subtitle จากไฟล์ MKV โดยไม่ต้องอัปโหลดไปเซิร์ฟเวอร์ (Pure JS Parser)</p>
 
   <div 
